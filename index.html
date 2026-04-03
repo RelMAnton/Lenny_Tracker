@@ -371,6 +371,63 @@
     }
 
   #tab-actions { flex: 1; }
+
+    /* TASKS TAB */
+    .tasks-view { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .add-task-btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: 14px;
+      background: var(--accent);
+      border: none;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      color: white;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .add-task-btn:active { opacity: 0.8; }
+
+    .task-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      animation: slideIn 0.2s ease;
+    }
+    .task-radio {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: none;
+      flex-shrink: 0;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.15s, background 0.15s;
+      padding: 0;
+    }
+    .task-radio:active { border-color: var(--accent); background: var(--accent); }
+    .task-body { flex: 1; }
+    .task-label { font-size: 15px; font-weight: 700; }
+    .task-date {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      font-weight: 600;
+    }
+    .task-date.overdue { color: #ef4444; }
+
+    .tasks-empty {
+      text-align: center;
+      padding: 50px 20px;
+      color: var(--text-muted);
+    }
+    .tasks-empty .icon { font-size: 44px; margin-bottom: 12px; }
+    .tasks-empty p { font-size: 15px; }
     .content::-webkit-scrollbar { width: 4px; }
     .content::-webkit-scrollbar-track { background: transparent; }
     .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -389,6 +446,7 @@
 <div class="tabs">
   <div class="tab active" data-tab="actions" onclick="switchTab('actions')">🐾 Действия</div>
   <div class="tab" data-tab="log" onclick="switchTab('log')">📋 Журнал</div>
+  <div class="tab" data-tab="tasks" onclick="switchTab('tasks')">✅ Задачи</div>
 
 </div>
 
@@ -435,6 +493,12 @@
     <div id="log-list"></div>
   </div>
 
+  <!-- TASKS TAB -->
+  <div id="tab-tasks" class="tasks-view" style="display:none;">
+    <button class="add-task-btn" onclick="openAddTask()">+ Новая задача</button>
+    <div id="tasks-list"></div>
+  </div>
+
 
 </div>
 
@@ -460,6 +524,20 @@
     <div class="modal-btns" style="margin-top:14px;">
       <button class="modal-btn outside" onclick="saveCustomEntry()" style="grid-column:1/-1">💾 Сохранить</button>
       <button class="modal-btn cancel" onclick="closeCustomModal()">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal-overlay" id="task-modal" style="display:none;" onclick="closeAddTask()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">📌 Новая задача</div>
+    <div class="modal-sub">Что нужно не забыть?</div>
+    <input id="task-input" class="custom-input" type="text" placeholder="Например: глистогонка" maxlength="80">
+    <input id="task-date-input" class="custom-input" type="date" style="margin-top:10px;">
+    <div class="modal-btns" style="margin-top:14px;">
+      <button class="modal-btn outside" onclick="saveTask()" style="grid-column:1/-1">💾 Добавить</button>
+      <button class="modal-btn cancel" onclick="closeAddTask()">Отмена</button>
     </div>
   </div>
 </div>
@@ -674,10 +752,85 @@ function exportData() {
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
-  ['actions', 'log'].forEach(t => {
+  ['actions', 'log', 'tasks'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === name ? '' : 'none';
   });
   if (name === 'log') renderLog();
+  if (name === 'tasks') renderTasks();
+}
+
+// ── Tasks (localStorage) ──────────────────────────────────
+function loadTasks() {
+  try { return JSON.parse(localStorage.getItem('lenya_tasks') || '[]'); }
+  catch { return []; }
+}
+function saveTasks(tasks) {
+  localStorage.setItem('lenya_tasks', JSON.stringify(tasks));
+}
+
+function openAddTask() {
+  document.getElementById('task-input').value = '';
+  document.getElementById('task-date-input').value = '';
+  document.getElementById('task-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('task-input').focus(), 100);
+}
+function closeAddTask() {
+  document.getElementById('task-modal').style.display = 'none';
+}
+
+function saveTask() {
+  const text = document.getElementById('task-input').value.trim();
+  if (!text) return;
+  const date = document.getElementById('task-date-input').value;
+  const tasks = loadTasks();
+  tasks.push({ id: Date.now(), text, date });
+  saveTasks(tasks);
+  closeAddTask();
+  renderTasks();
+}
+
+function completeTask(id) {
+  const el = document.getElementById(`task-${id}`);
+  if (el) {
+    el.style.transition = 'opacity 0.3s, transform 0.3s';
+    el.style.opacity = '0';
+    el.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      saveTasks(loadTasks().filter(t => t.id !== id));
+      renderTasks();
+    }, 300);
+  }
+}
+
+function renderTasks() {
+  const tasks = loadTasks();
+  const container = document.getElementById('tasks-list');
+  if (!tasks.length) {
+    container.innerHTML = `<div class="tasks-empty"><div class="icon">📋</div><p>Нет задач.<br>Нажми «+ Новая задача»!</p></div>`;
+    return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  // Sort: overdue first, then by date, then no date
+  tasks.sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return a.date.localeCompare(b.date);
+  });
+  container.innerHTML = tasks.map(t => {
+    const isOverdue = t.date && t.date < today;
+    const dateLabel = t.date
+      ? new Date(t.date + 'T00:00:00').toLocaleDateString('ru', { day: 'numeric', month: 'long' })
+      : '';
+    return `
+      <div class="task-item" id="task-${t.id}">
+        <button class="task-radio" onclick="completeTask(${t.id})"></button>
+        <div class="task-body">
+          <div class="task-label">${t.text}</div>
+          ${dateLabel ? `<div class="task-date ${isOverdue ? 'overdue' : ''}">${isOverdue ? '⚠️ ' : '📅 '}${dateLabel}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function openCustomModal() {
@@ -715,6 +868,9 @@ async function saveCustomEntry() {
   document.getElementById('today-summary').textContent = 'Загрузка...';
   document.getElementById('custom-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') saveCustomEntry();
+  });
+  document.getElementById('task-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveTask();
   });
   await fetchEntries();
   updateSummary();
